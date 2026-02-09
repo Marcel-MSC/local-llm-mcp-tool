@@ -1,0 +1,28 @@
+===========================================
+COMANDO PARA INSTALAR llama-cpp-python
+==========================================
+
+COPIE E COLE ESTE COMANDO NO SEU TERMINAL:
+
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+===========================================
+
+IMPORTANTE:
+- NÃO execute apenas "pip install llama-cpp-python"
+- Você DEVE incluir o --extra-index-url
+- Isso baixa uma versão pré-compilada (não tenta compilar)
+
+===========================================
+
+Se o comando acima não funcionar, tente:
+
+pip install llama-cpp-python==0.2.20 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+
+===========================================
+
+Ou use os scripts automáticos:
+- PowerShell: .\install_llama.ps1
+- CMD: install_llama.bat
+
+===========================================

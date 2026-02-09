@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "local-llm": {
+      "command": "python",
+      "args": [
+        "C:\\path\\to\\local-llm-mcp-tool\\server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}
