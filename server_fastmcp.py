@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Servidor MCP com integração Llama usando FastMCP (versão alternativa mais simples)
+MCP server with Llama integration using FastMCP (simpler alternative version)
 """
 import os
 import sys
@@ -10,32 +10,32 @@ from dotenv import load_dotenv
 try:
     from llama_cpp import Llama
 except ImportError:
-    print("Erro: llama-cpp-python não está instalado.", file=sys.stderr)
-    print("Instale com: pip install llama-cpp-python", file=sys.stderr)
+    print("Error: llama-cpp-python is not installed.", file=sys.stderr)
+    print("Install with: pip install llama-cpp-python", file=sys.stderr)
     sys.exit(1)
 
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
-    print("Erro: biblioteca MCP não está instalada.", file=sys.stderr)
-    print("Instale com: pip install mcp", file=sys.stderr)
+    print("Error: MCP library is not installed.", file=sys.stderr)
+    print("Install with: pip install mcp", file=sys.stderr)
     sys.exit(1)
 
-# Carrega variáveis de ambiente
+# Load environment variables
 load_dotenv()
 
-# Configurações padrão
+# Default configurations
 DEFAULT_MODEL_PATH = os.getenv("MODEL_PATH", "")
 DEFAULT_CONTEXT_SIZE = int(os.getenv("CONTEXT_SIZE", "2048"))
 DEFAULT_N_THREADS = int(os.getenv("N_THREADS", "4"))
 DEFAULT_N_GPU_LAYERS = int(os.getenv("N_GPU_LAYERS", "0"))
 
-# Instância global do modelo
+# Global model instance
 llama_model: Optional[Llama] = None
 
 
 def get_model() -> Llama:
-    """Obtém ou carrega o modelo Llama"""
+    """Gets or loads the Llama model"""
     global llama_model
     
     if llama_model is not None:
@@ -44,11 +44,11 @@ def get_model() -> Llama:
     path = DEFAULT_MODEL_PATH
     
     if not path or not os.path.exists(path):
-        error_msg = f"Erro: Modelo não encontrado em {path}\nPor favor, configure MODEL_PATH no arquivo .env\nOu baixe um modelo GGUF de: https://huggingface.co/models?library=gguf"
+        error_msg = f"Error: Model not found at {path}\nPlease configure MODEL_PATH in the .env file\nOr download a GGUF model from: https://huggingface.co/models?library=gguf"
         print(error_msg, file=sys.stderr)
-        raise FileNotFoundError(f"Modelo não encontrado: {path}")
+        raise FileNotFoundError(f"Model not found: {path}")
     
-    print(f"Carregando modelo de: {path}", file=sys.stderr)
+    print(f"Loading model from: {path}", file=sys.stderr)
     
     try:
         llama_model = Llama(
@@ -58,14 +58,14 @@ def get_model() -> Llama:
             n_gpu_layers=DEFAULT_N_GPU_LAYERS,
             verbose=False
         )
-        print("Modelo carregado com sucesso!", file=sys.stderr)
+        print("Model loaded successfully!", file=sys.stderr)
         return llama_model
     except Exception as e:
-        print(f"Erro ao carregar modelo: {e}", file=sys.stderr)
+        print(f"Error loading model: {e}", file=sys.stderr)
         raise
 
 
-# Cria o servidor FastMCP
+# Create FastMCP server
 mcp = FastMCP("Local LLM MCP Tool")
 
 
@@ -76,7 +76,7 @@ def generate_text(
     temperature: float = 0.7,
     top_p: float = 0.9
 ) -> str:
-    """Gera texto usando o modelo Llama localmente"""
+    """Generates text using the Llama model locally"""
     model = get_model()
     
     output = model(
@@ -97,10 +97,10 @@ def chat(
     max_tokens: int = 256,
     temperature: float = 0.7
 ) -> str:
-    """Conversa com o modelo Llama usando formato de chat"""
+    """Chats with the Llama model using chat format"""
     model = get_model()
     
-    # Converte mensagens para formato de prompt
+    # Convert messages to prompt format
     prompt_parts = []
     for msg in messages:
         role = msg.get("role", "user")
@@ -131,7 +131,7 @@ def complete(
     max_tokens: int = 128,
     temperature: float = 0.7
 ) -> str:
-    """Completa um texto usando o modelo Llama"""
+    """Completes text using the Llama model"""
     model = get_model()
     
     output = model(
@@ -145,13 +145,13 @@ def complete(
 
 
 if __name__ == "__main__":
-    # Tenta carregar o modelo na inicialização (opcional)
+    # Try to load model on initialization (optional)
     try:
         if DEFAULT_MODEL_PATH and os.path.exists(DEFAULT_MODEL_PATH):
             get_model()
     except Exception as e:
-        print(f"Aviso: Não foi possível carregar o modelo na inicialização: {e}", file=sys.stderr)
-        print("O modelo será carregado quando a primeira ferramenta for chamada.", file=sys.stderr)
+        print(f"Warning: Could not load model on initialization: {e}", file=sys.stderr)
+        print("The model will be loaded when the first tool is called.", file=sys.stderr)
     
-    # Inicia o servidor usando stdio
+    # Start server using stdio
     mcp.run(transport="stdio")

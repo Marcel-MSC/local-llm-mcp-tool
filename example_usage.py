@@ -1,17 +1,17 @@
 """
-Exemplo de uso do servidor MCP Llama localmente
-Este arquivo demonstra como usar o servidor programaticamente
+Example usage of the local Llama MCP server
+This file demonstrates how to use the server programmatically
 """
 import asyncio
 from server import load_model, llama_model
 
-async def exemplo_geracao_texto():
-    """Exemplo de geração de texto"""
-    print("=== Exemplo: Geração de Texto ===")
+async def example_text_generation():
+    """Example of text generation"""
+    print("=== Example: Text Generation ===")
     
     model = load_model()
     
-    prompt = "Escreva uma história curta sobre um robô que aprende a cozinhar."
+    prompt = "Write a short story about a robot that learns to cook."
     print(f"Prompt: {prompt}\n")
     
     output = model(
@@ -22,23 +22,23 @@ async def exemplo_geracao_texto():
         echo=False
     )
     
-    print("Resposta:")
+    print("Response:")
     print(output["choices"][0]["text"])
     print()
 
 
-async def exemplo_chat():
-    """Exemplo de chat"""
-    print("=== Exemplo: Chat ===")
+async def example_chat():
+    """Example of chat"""
+    print("=== Example: Chat ===")
     
     model = load_model()
     
     messages = [
-        {"role": "system", "content": "Você é um assistente útil e amigável."},
-        {"role": "user", "content": "Explique o que é inteligência artificial em uma frase."}
+        {"role": "system", "content": "You are a helpful and friendly assistant."},
+        {"role": "user", "content": "Explain what artificial intelligence is in one sentence."}
     ]
     
-    # Converte para prompt
+    # Convert to prompt
     prompt_parts = []
     for msg in messages:
         role = msg["role"]
@@ -58,19 +58,19 @@ async def exemplo_chat():
         stop=["User:", "System:"]
     )
     
-    print("Resposta do assistente:")
+    print("Assistant response:")
     print(output["choices"][0]["text"].strip())
     print()
 
 
-async def exemplo_completar():
-    """Exemplo de completar texto"""
-    print("=== Exemplo: Completar Texto ===")
+async def example_complete():
+    """Example of text completion"""
+    print("=== Example: Text Completion ===")
     
     model = load_model()
     
-    text = "Python é uma linguagem de programação"
-    print(f"Texto inicial: {text}\n")
+    text = "Python is a programming language"
+    print(f"Initial text: {text}\n")
     
     output = model(
         text,
@@ -79,24 +79,24 @@ async def exemplo_completar():
         echo=False
     )
     
-    print("Texto completo:")
+    print("Completed text:")
     print(output["choices"][0]["text"])
     print()
 
 
 async def main():
-    """Executa todos os exemplos"""
+    """Runs all examples"""
     try:
-        await exemplo_geracao_texto()
-        await exemplo_chat()
-        await exemplo_completar()
+        await example_text_generation()
+        await example_chat()
+        await example_complete()
     except FileNotFoundError as e:
-        print(f"Erro: {e}")
-        print("\nPor favor:")
-        print("1. Configure MODEL_PATH no arquivo .env")
-        print("2. Baixe um modelo GGUF de https://huggingface.co/models?library=gguf")
+        print(f"Error: {e}")
+        print("\nPlease:")
+        print("1. Configure MODEL_PATH in the .env file")
+        print("2. Download a GGUF model from https://huggingface.co/models?library=gguf")
     except Exception as e:
-        print(f"Erro ao executar exemplos: {e}")
+        print(f"Error running examples: {e}")
 
 
 if __name__ == "__main__":

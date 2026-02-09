@@ -26,7 +26,7 @@ A local MCP (Model Context Protocol) server that runs Llama models entirely on y
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/local-llm-mcp-tool.git
+git clone https://github.com/Marcel-MSC/local-llm-mcp-tool.git
 cd local-llm-mcp-tool
 ```
 
@@ -62,7 +62,7 @@ pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-c
 install_llama.bat
 ```
 
-> ⚠️ **Note:** If you get compilation errors, see [INSTALACAO_WINDOWS.md](INSTALACAO_WINDOWS.md) for troubleshooting. You can also install Visual Studio Build Tools to compile from source.
+> ⚠️ **Note:** If you get compilation errors, see [WINDOWS_INSTALLATION.md](docs/WINDOWS_INSTALLATION.md) for troubleshooting. You can also install Visual Studio Build Tools to compile from source.
 
 ### 4. Configure the model
 
@@ -240,7 +240,7 @@ Download from: [Hugging Face GGUF Models](https://huggingface.co/models?library=
 - Reduce `CONTEXT_SIZE` if you don't need long context
 
 ### Compilation errors on Windows
-- See [INSTALAR_COMPILADOR_WINDOWS.md](INSTALAR_COMPILADOR_WINDOWS.md) for installing Visual Studio Build Tools
+- See [INSTALL_COMPILER_WINDOWS.md](docs/INSTALL_COMPILER_WINDOWS.md) for installing Visual Studio Build Tools
 - Or use pre-built wheels (recommended)
 
 ## 📁 Project Structure
@@ -277,7 +277,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🔮 Future Ideas
 
-See [IDEAS_EVOLUCAO.md](IDEAS_EVOLUCAO.md) for planned features:
+See [FUTURE_IDEAS.md](docs/FUTURE_IDEAS.md) for planned features:
 - Conversation history/sessions
 - Streaming responses
 - RAG (document Q&A)

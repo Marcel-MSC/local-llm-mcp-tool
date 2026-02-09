@@ -1,58 +1,58 @@
 @echo off
-REM Script batch para instalar llama-cpp-python no Windows
-REM Este script instala usando wheels pré-compilados
+REM Batch script to install llama-cpp-python on Windows
+REM This script installs using pre-built wheels
 
-echo === Instalador llama-cpp-python para Windows ===
+echo === llama-cpp-python Installer for Windows ===
 echo.
 
-REM Verifica Python
-echo Verificando Python...
+REM Check Python
+echo Checking Python...
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo ERRO: Python nao encontrado!
-    echo Instale Python 3.10 ou superior de https://www.python.org/
+    echo ERROR: Python not found!
+    echo Install Python 3.10 or higher from https://www.python.org/
     pause
     exit /b 1
 )
 
-REM Remove instalação anterior se existir
-echo Removendo instalacoes anteriores (se houver)...
+REM Remove previous installation if exists
+echo Removing previous installations (if any)...
 pip uninstall -y llama-cpp-python >nul 2>&1
 
 echo.
-echo Instalando llama-cpp-python (versao CPU)...
-echo Usando wheels pre-compilados para evitar erros de compilacao.
+echo Installing llama-cpp-python (CPU version)...
+echo Using pre-built wheels to avoid compilation errors.
 echo.
 
 pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 
 if errorlevel 1 (
     echo.
-    echo === ERRO na instalacao ===
+    echo === Installation ERROR ===
     echo.
-    echo Tentando versao especifica...
+    echo Trying specific version...
     pip install llama-cpp-python==0.2.20 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 )
 
 if errorlevel 1 (
     echo.
-    echo ERRO: Falha na instalacao
-    echo Consulte INSTALACAO_WINDOWS.md para mais detalhes
+    echo ERROR: Installation failed
+    echo See docs/WINDOWS_INSTALLATION.md for more details
     pause
     exit /b 1
 )
 
 echo.
-echo === Instalacao concluida! ===
+echo === Installation completed! ===
 echo.
-echo Testando instalacao...
-python -c "from llama_cpp import Llama; print('OK: llama-cpp-python instalado corretamente!')"
+echo Testing installation...
+python -c "from llama_cpp import Llama; print('OK: llama-cpp-python installed correctly!')"
 
 if errorlevel 1 (
-    echo Aviso: A instalacao pode ter problemas. Tente testar manualmente.
+    echo Warning: Installation may have issues. Try testing manually.
 ) else (
     echo.
-    echo Tudo pronto! Voce pode continuar com a configuracao do servidor MCP.
+    echo All ready! You can continue with the MCP server configuration.
 )
 
 pause
