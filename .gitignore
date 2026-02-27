@@ -42,6 +42,9 @@ models/
 # Personal configuration files
 cursor_config.json
 
+# Conversation history (session files)
+history/
+
 # OS
 .DS_Store
 Thumbs.db

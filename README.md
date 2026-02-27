@@ -11,9 +11,16 @@ A local MCP (Model Context Protocol) server that runs Llama models entirely on y
 - 🚀 **100% Local** - All inference runs on your CPU/GPU, no data leaves your machine
 - 🔒 **Private** - Your conversations stay on your device
 - 💰 **Free** - No API costs or usage limits
-- 🛠️ **Three Tools** - `generate_text`, `chat`, and `complete` via MCP
+- 🛠️ **Multiple Tools** - `generate_text`, `chat`, `complete`, and session management via MCP
+- 💬 **Conversation History & Sessions** - Persistent session management with automatic history trimming to minimize storage
+- 📡 **Streaming Support** - Optional incremental token streaming for faster response display
 - 🪟 **Windows Optimized** - Pre-built wheels and installation scripts included
 - 🔌 **Cursor Compatible** - Works seamlessly with Cursor IDE
+
+### 🆕 Recent Additions
+
+- **Conversation History & Sessions**: Create persistent conversation sessions with automatic history management. Sessions store messages in `history/` folder with configurable limits to minimize storage usage.
+- **Streaming Responses**: Enable incremental token streaming for faster perceived response times. Configure chunk size and enable/disable via environment variables.
 
 ## 📋 Requirements
 
@@ -112,6 +119,12 @@ python server_fastmcp.py
 | `CONTEXT_SIZE` | Maximum context window size | `2048` |
 | `N_THREADS` | Number of CPU threads | `4` |
 | `N_GPU_LAYERS` | GPU layers (use `-1` for all, `0` for CPU only) | `0` |
+| `SESSION_HISTORY_DIR` | Directory for storing conversation history | `history` |
+| `SESSION_MAX_MESSAGES` | Maximum messages per session (older messages trimmed) | `40` |
+| `SESSION_MAX_FILE_BYTES` | Maximum size per session file (bytes) | `2097152` (~2MB) |
+| `SESSION_AUTO_TRIM` | Automatically trim history when limits exceeded | `true` |
+| `STREAMING_ENABLED` | Enable streaming responses (tokens sent incrementally) | `false` |
+| `STREAMING_CHUNK_SIZE` | Approximate chunk size for streaming (characters) | `50` |
 
 ### Using with Cursor IDE
 
@@ -158,7 +171,7 @@ python server_fastmcp.py
 
 ## 🛠️ Available Tools
 
-The server exposes three MCP tools:
+The server exposes several MCP tools:
 
 ### 1. `generate_text`
 
@@ -188,18 +201,70 @@ Complete a text prompt.
 - `max_tokens` (optional, default: 128): Maximum tokens to generate
 - `temperature` (optional, default: 0.7): Sampling temperature
 
+### 4. `start_session`
+
+Start a new conversation session and get back a `session_id`. This groups
+multiple turns together while keeping CPU and disk usage bounded.
+
+**Parameters:**
+- `metadata` (optional): JSON object with metadata like `purpose`, `label`, etc.
+
+### 5. `continue_session`
+
+Continue an existing session by adding a new user message. The server loads
+only the most recent messages for context (limited by environment variables)
+to avoid heavy CPU and storage usage.
+
+**Parameters:**
+- `session_id` (required): The ID returned by `start_session`.
+- `message` (required): The new user message.
+- `max_tokens` (optional, default: 256): Maximum tokens to generate.
+- `temperature` (optional, default: 0.7): Sampling temperature.
+- `top_p` (optional, default: 0.9): Top-p sampling.
+
+### 6. `end_session`
+
+Mark a session as ended and optionally delete its history from disk.
+
+**Parameters:**
+- `session_id` (required): The ID of the session to end.
+- `delete` (optional, default: `false`): Whether to delete the stored history.
+
 ## 📚 Usage Examples
 
 ### In Cursor Chat
 
-Ask the AI to use the tools:
-
+**Basic text generation:**
 ```
 Use the generate_text tool from local-llm with prompt: Write a short sentence about programming.
 ```
 
+**Chat with messages:**
 ```
-Use the chat tool from local-llm with message: What is Python?
+Use the chat tool from local-llm with messages: [{"role": "user", "content": "What is Python?"}]
+```
+
+**Using conversation sessions:**
+
+1. Start a session:
+```
+Use the start_session tool from local-llm with metadata: {"label": "coding-help"}
+```
+
+2. Continue the conversation (use the session_id from step 1):
+```
+Use the continue_session tool from local-llm with:
+session_id: abc123...
+message: How do I create a Python function?
+```
+
+3. Continue with more messages using the same session_id to maintain context.
+
+4. End the session when done:
+```
+Use the end_session tool from local-llm with:
+session_id: abc123...
+delete: false
 ```
 
 ### Programmatic Usage
@@ -215,6 +280,84 @@ Any Llama-compatible model in GGUF format works. Recommended:
 - **Mistral 7B** - Alternative option
 
 Download from: [Hugging Face GGUF Models](https://huggingface.co/models?library=gguf)
+
+## 💬 Conversation History & Sessions
+
+The server supports **persistent conversation sessions** that maintain context across multiple interactions while minimizing storage and CPU usage.
+
+### How Sessions Work
+
+1. **Start a session** using `start_session` to get a unique `session_id`
+2. **Continue conversations** using `continue_session` with the same `session_id` to maintain context
+3. **History is stored** in the `history/` folder (one `.jsonl` file per session)
+4. **Automatic trimming** keeps only the most recent messages (configurable limits)
+5. **End sessions** with `end_session` when done (optionally delete history)
+
+### Storage Management
+
+- History files are stored in `history/<session_id>.jsonl` (line-delimited JSON)
+- Session metadata is tracked in `history/sessions_index.json`
+- Automatic trimming prevents unbounded growth:
+  - Maximum messages per session (default: 40)
+  - Maximum file size per session (default: ~2MB)
+- The `history/` folder is gitignored by default
+
+### Configuration
+
+See the **Environment Variables** table above for session-related settings:
+- `SESSION_HISTORY_DIR`: Where to store history files
+- `SESSION_MAX_MESSAGES`: How many messages to keep per session
+- `SESSION_MAX_FILE_BYTES`: Maximum file size before trimming
+- `SESSION_AUTO_TRIM`: Enable/disable automatic trimming
+
+### Example Session Flow
+
+```python
+# 1. Start session
+session_id = start_session(metadata={"label": "coding-help"})
+
+# 2. Continue conversation (maintains context)
+response1 = continue_session(session_id, "What is Python?")
+response2 = continue_session(session_id, "How do I create a function?")  # Remembers previous context
+
+# 3. End session
+end_session(session_id, delete=False)  # Keep history, or delete=True to remove
+```
+
+## 📡 Streaming Responses
+
+The server supports **optional streaming** for faster response display. When enabled, tokens are sent incrementally as they're generated, rather than waiting for the complete response.
+
+### Enabling Streaming
+
+Set `STREAMING_ENABLED=true` in your `.env` file:
+
+```env
+STREAMING_ENABLED=true
+STREAMING_CHUNK_SIZE=50
+```
+
+- **`STREAMING_ENABLED`**: Enable/disable streaming (default: `false`)
+- **`STREAMING_CHUNK_SIZE`**: Approximate characters per chunk (default: `50`). Smaller values = more frequent updates but slightly more overhead.
+
+### How It Works
+
+When streaming is enabled:
+- **`generate_text`**, **`chat`**, **`complete`**, and **`continue_session`** tools return multiple `TextContent` chunks
+- Each chunk contains a portion of the generated text
+- The client (Cursor) can display text incrementally as it arrives
+- For **`continue_session`**, the full accumulated text is still persisted to session history after streaming completes
+
+### Performance Notes
+
+- Streaming adds minimal CPU overhead (just chunking logic)
+- Response **quality** is unchanged - streaming only affects **delivery timing**
+- On slower machines, consider using smaller models (1B-3B) with streaming enabled for best experience
+- Streaming works with both CPU and GPU inference
+
+### Disabling Streaming
+
+Set `STREAMING_ENABLED=false` (or omit it) to return complete responses in a single chunk, matching the original behavior.
 
 ## 🐛 Troubleshooting
 
@@ -278,10 +421,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🔮 Future Ideas
 
 See [FUTURE_IDEAS.md](docs/FUTURE_IDEAS.md) for planned features:
-- Conversation history/sessions
-- Streaming responses
+- ✅ ~~Conversation history/sessions~~ - **Implemented!**
+- ✅ ~~Streaming responses~~ - **Implemented!**
 - RAG (document Q&A)
 - Multiple model support
+- Session summarization for long conversations
 - And more...
 
 ---
