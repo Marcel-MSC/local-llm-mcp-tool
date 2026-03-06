@@ -41,6 +41,7 @@ models/
 
 # Personal configuration files
 cursor_config.json
+mcp.json
 
 # Conversation history (session files)
 history/

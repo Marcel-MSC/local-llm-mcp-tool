@@ -11,7 +11,7 @@ A local MCP (Model Context Protocol) server that runs Llama models entirely on y
 - 🚀 **100% Local** - All inference runs on your CPU/GPU, no data leaves your machine
 - 🔒 **Private** - Your conversations stay on your device
 - 💰 **Free** - No API costs or usage limits
-- 🛠️ **Multiple Tools** - `generate_text`, `chat`, `complete`, and session management via MCP
+- 🛠️ **Multiple Tools** - `generate_text`, `chat`, `complete`, `read_file`, `analyze_file`, and session management via MCP
 - 💬 **Conversation History & Sessions** - Persistent session management with automatic history trimming to minimize storage
 - 📡 **Streaming Support** - Optional incremental token streaming for faster response display
 - 🪟 **Windows Optimized** - Pre-built wheels and installation scripts included
@@ -201,7 +201,28 @@ Complete a text prompt.
 - `max_tokens` (optional, default: 128): Maximum tokens to generate
 - `temperature` (optional, default: 0.7): Sampling temperature
 
-### 4. `start_session`
+### 4. `read_file`
+
+Read a local text file from the MCP server's project directory. Relative paths are resolved from the directory containing `server.py`. Access is restricted to that directory tree (no `../..` traversal).
+
+**Parameters:**
+- `path` (required): File path (relative to the server root directory)
+- `max_bytes` (optional, default: 200000): Maximum bytes to read (prevents huge reads)
+- `encoding` (optional, default: `"utf-8"`): Text encoding used to decode file bytes
+
+### 5. `analyze_file`
+
+Read a local text file and ask the local Llama model to analyze it (purpose, structure, issues, improvements).
+
+**Parameters:**
+- `path` (required): File path (relative to the server root directory)
+- `instruction` (optional): Custom analysis instruction (e.g. "Focus on security", "Summarize in 3 bullets")
+- `max_bytes` (optional, default: 200000): Maximum bytes to read from the file
+- `encoding` (optional, default: `"utf-8"`): File encoding
+- `max_tokens` (optional, default: 512): Max tokens for the analysis response
+- `temperature` (optional, default: 0.3): Sampling temperature for analysis
+
+### 6. `start_session`
 
 Start a new conversation session and get back a `session_id`. This groups
 multiple turns together while keeping CPU and disk usage bounded.
@@ -209,7 +230,7 @@ multiple turns together while keeping CPU and disk usage bounded.
 **Parameters:**
 - `metadata` (optional): JSON object with metadata like `purpose`, `label`, etc.
 
-### 5. `continue_session`
+### 7. `continue_session`
 
 Continue an existing session by adding a new user message. The server loads
 only the most recent messages for context (limited by environment variables)
@@ -222,7 +243,7 @@ to avoid heavy CPU and storage usage.
 - `temperature` (optional, default: 0.7): Sampling temperature.
 - `top_p` (optional, default: 0.9): Top-p sampling.
 
-### 6. `end_session`
+### 8. `end_session`
 
 Mark a session as ended and optionally delete its history from disk.
 
@@ -242,6 +263,37 @@ Use the generate_text tool from local-llm with prompt: Write a short sentence ab
 **Chat with messages:**
 ```
 Use the chat tool from local-llm with messages: [{"role": "user", "content": "What is Python?"}]
+```
+
+**Read a file from disk (returns the file text):**
+```
+Use the read_file tool from local-llm with:
+path: README.md
+```
+
+**Analyze a file from disk (server reads the file and the LLM analyzes it):**
+```
+Use the analyze_file tool from local-llm with:
+path: server.py
+instruction: Summarize the main components and list 3 improvements.
+```
+
+**“Use generate_text and read README.md + server.py” (2-step workflow):**
+
+1. Read each file (one tool call per file):
+```
+Use the read_file tool from local-llm with:
+path: README.md
+```
+```
+Use the read_file tool from local-llm with:
+path: server.py
+max_bytes: 200000
+```
+
+2. Then call `generate_text` using the file contents shown above in chat context:
+```
+Use the generate_text tool from local-llm with prompt: Compare the README and server.py content above. Are the documented tools accurate? List any mismatches and propose README fixes.
 ```
 
 **Using conversation sessions:**

@@ -424,6 +424,59 @@ def mark_session_ended(session_id: str, delete: bool = False) -> bool:
     return True
 
 
+def _read_file_safe(
+    path_arg: str,
+    max_bytes: int = 200000,
+    encoding: str = "utf-8",
+) -> tuple[Optional[str], Optional[Path], Optional[str]]:
+    """Read a file from the server base directory with path safety checks.
+
+    Returns:
+        (content, full_path, None) on success, or (None, None, error_message) on failure.
+    """
+    if not path_arg:
+        return None, None, "Error: path is required"
+    if max_bytes <= 0:
+        return None, None, "Error: max_bytes must be a positive integer"
+
+    raw_path = Path(path_arg)
+    if raw_path.is_absolute():
+        full_path = raw_path
+    else:
+        full_path = (BASE_DIR / raw_path).resolve()
+
+    base_resolved = BASE_DIR.resolve()
+    try:
+        full_path.relative_to(base_resolved)
+    except ValueError:
+        return (
+            None,
+            None,
+            f"Error: access outside the MCP server directory is not allowed.\nBase directory: {base_resolved}",
+        )
+
+    if not full_path.exists():
+        return None, None, f"Error: file not found: {full_path}"
+    if not full_path.is_file():
+        return None, None, f"Error: path is not a file: {full_path}"
+
+    try:
+        with full_path.open("rb") as f:
+            data = f.read(max_bytes + 1)
+    except Exception as exc:
+        return None, None, f"Error reading file {full_path}: {exc}"
+
+    if len(data) > max_bytes:
+        data = data[:max_bytes]
+
+    try:
+        text = data.decode(encoding, errors="replace")
+    except LookupError:
+        return None, None, f"Error: unknown text encoding '{encoding}'"
+
+    return text, full_path, None
+
+
 # Create MCP server
 server = Server("local-llm-mcp-tool")
 
@@ -515,6 +568,88 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["text"]
             }
+        ),
+        Tool(
+            name="read_file",
+            description=(
+                "Reads a local text file from the MCP server's project directory "
+                "(relative paths are resolved from the server root and access is "
+                "restricted to that tree)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Path to the file. Relative paths are resolved from the "
+                            "MCP server root directory."
+                        ),
+                    },
+                    "max_bytes": {
+                        "type": "integer",
+                        "description": (
+                            "Maximum number of bytes to read from the file "
+                            "(helps avoid huge reads)."
+                        ),
+                        "default": 200000,
+                    },
+                    "encoding": {
+                        "type": "string",
+                        "description": (
+                            "Text encoding used to decode the file contents."
+                        ),
+                        "default": "utf-8",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="analyze_file",
+            description=(
+                "Reads a local text file and uses the Llama model to analyze it: "
+                "purpose, structure, potential issues, and improvements. "
+                "Path is relative to the MCP server root; access is restricted to that tree."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file (relative to the MCP server root).",
+                    },
+                    "instruction": {
+                        "type": "string",
+                        "description": (
+                            "Optional custom instruction for the analysis "
+                            "(e.g. 'Focus on security' or 'Summarize in 3 bullet points'). "
+                            "If omitted, a general analysis is performed."
+                        ),
+                    },
+                    "max_bytes": {
+                        "type": "integer",
+                        "description": "Maximum bytes to read from the file.",
+                        "default": 200000,
+                    },
+                    "encoding": {
+                        "type": "string",
+                        "description": "Text encoding for the file.",
+                        "default": "utf-8",
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "description": "Maximum tokens for the model's analysis.",
+                        "default": 512,
+                    },
+                    "temperature": {
+                        "type": "number",
+                        "description": "Temperature for sampling.",
+                        "default": 0.3,
+                    },
+                },
+                "required": ["path"],
+            },
         ),
         Tool(
             name="start_session",
@@ -633,6 +768,52 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     text=f"Session {session_id} has been ended {action}.",
                 )
             ]
+
+        if name == "read_file":
+            path_arg = arguments.get("path", "")
+            max_bytes = int(arguments.get("max_bytes", 200000))
+            encoding = arguments.get("encoding", "utf-8")
+            content, full_path, err = _read_file_safe(path_arg, max_bytes, encoding)
+            if err is not None:
+                return [TextContent(type="text", text=err)]
+            assert content is not None and full_path is not None
+            header = f"Path: {full_path}\nCharacters: {len(content)}"
+            body = f"{header}\n\n{content}"
+            return [TextContent(type="text", text=body)]
+
+        if name == "analyze_file":
+            path_arg = arguments.get("path", "")
+            instruction = (arguments.get("instruction") or "").strip()
+            max_bytes = int(arguments.get("max_bytes", 200000))
+            encoding = arguments.get("encoding", "utf-8")
+            max_tokens = int(arguments.get("max_tokens", 512))
+            temperature = float(arguments.get("temperature", 0.3))
+            content, full_path, err = _read_file_safe(path_arg, max_bytes, encoding)
+            if err is not None:
+                return [TextContent(type="text", text=err)]
+            assert content is not None and full_path is not None
+            if not instruction:
+                instruction = (
+                    "Analyze this file. Describe its purpose, structure, "
+                    "and any notable issues or improvements. Be concise but informative."
+                )
+            prompt = (
+                f"{instruction}\n\n"
+                f"--- File: {full_path} ---\n\n"
+                f"{content}"
+            )
+            model = load_model()
+            chunks, _ = generate_completion(
+                model,
+                prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=0.9,
+                stop=None,
+                streaming=DEFAULT_STREAMING_ENABLED,
+                chunk_size=DEFAULT_STREAMING_CHUNK_SIZE,
+            )
+            return chunks
 
         # Load model if not already loaded
         model = load_model()
