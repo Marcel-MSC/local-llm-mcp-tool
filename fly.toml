@@ -1,48 +1,23 @@
-# Fly.io deployment configuration for Local LLM MCP Tool
+# fly.toml app configuration file generated for local-llm-mcp-tool on 2026-03-07T11:16:23Z
 #
-# First time: fly launch  (creates app, or use --now to deploy immediately)
-# Deploy:     fly deploy
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
-# Required: Set MODEL_URL to download a model at startup, e.g.:
-#   fly secrets set MODEL_URL="https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf"
-#
-# MCP endpoint: https://<your-app>.fly.dev/mcp
 
-app = "local-llm-mcp"
+app = 'local-llm-mcp-tool'
+primary_region = 'iad'
 
 [build]
-  dockerfile = "Dockerfile"
 
-[env]
-  PORT = "8080"
-  PYTHONUNBUFFERED = "1"
-
-# HTTP service - MCP server runs on Streamable HTTP at /mcp
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
+  processes = ['app']
 
-  [http_service.concurrency]
-    type = "requests"
-    soft_limit = 5
-    hard_limit = 10
-
-  [[http_service.checks]]
-    grace_period = "60s"
-    interval = "30s"
-    method = "GET"
-    path = "/"
-    timeout = "10s"
-
-# LLM inference needs substantial memory - use at least 2GB
 [[vm]]
-  memory = "2gb"
-  cpu_kind = "shared"
-  cpus = 2
-
-[deploy]
-  strategy = "rolling"
-  wait_timeout = "10m"
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
