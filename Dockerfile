@@ -16,10 +16,9 @@ COPY requirements.txt .
 # Install Python deps (llama-cpp-python excluded - uses wheel below)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install llama-cpp-python from pre-built CPU wheel (avoids compilation in container)
-RUN pip install --no-cache-dir llama-cpp-python \
-    --index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
-    --extra-index-url https://pypi.org/simple/
+# Install llama-cpp-python-binary: pre-built wheels on PyPI, drop-in for llama-cpp-python
+# (abetlen wheel index may lack Linux wheels for newer versions)
+RUN pip install --no-cache-dir llama-cpp-python-binary
 
 # Copy application code
 COPY server_fastmcp.py server_http.py download_model.py entrypoint.sh ./
