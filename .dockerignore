@@ -1,0 +1,36 @@
+# Git and IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.Python
+*.so
+.venv
+venv
+env
+
+# Local config and models (large files)
+.env
+*.gguf
+*.bin
+models/
+
+# Docs and scripts (not needed at runtime)
+docs/
+*.md
+*.bat
+*.ps1
+install_llama*
+HOW_TO_RUN.md
+example_usage.py
+test_server.py
+cursor_config.json*
+mcp.json
+
+# History
+history/
