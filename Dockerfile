@@ -13,10 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# Install Python deps; use CPU wheel for llama-cpp-python (no CUDA on Fly)
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir llama-cpp-python \
-        --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+# Install Python deps (llama-cpp-python excluded - uses wheel below)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install llama-cpp-python from pre-built CPU wheel (avoids compilation in container)
+RUN pip install --no-cache-dir llama-cpp-python \
+    --index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+    --extra-index-url https://pypi.org/simple/
 
 # Copy application code
 COPY server_fastmcp.py server_http.py download_model.py entrypoint.sh ./
