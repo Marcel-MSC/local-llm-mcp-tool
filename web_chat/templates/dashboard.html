@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Local LLM{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">Dashboard</h1>
+
+<div class="dash-grid" id="dashGrid">
+  <div class="dash-card">
+    <div class="value" id="totalTokens">-</div>
+    <div class="label">Total de tokens</div>
+  </div>
+  <div class="dash-card">
+    <div class="value" id="totalRequests">-</div>
+    <div class="label">Requisições</div>
+  </div>
+  <div class="dash-card dash-card-time">
+    <div class="label">Tempo médio</div>
+    <div class="value" id="avgResponse">-</div>
+    <select id="unitAvg" class="time-unit-select" title="Unidade de exibição">
+      <option value="s">segundos</option>
+      <option value="ms">milissegundos</option>
+      <option value="min">minutos</option>
+      <option value="h">horas</option>
+    </select>
+  </div>
+  <div class="dash-card dash-card-time">
+    <div class="label">Tempo total</div>
+    <div class="value" id="totalTime">-</div>
+    <select id="unitTotal" class="time-unit-select" title="Unidade de exibição">
+      <option value="s">segundos</option>
+      <option value="ms">milissegundos</option>
+      <option value="min">minutos</option>
+      <option value="h">horas</option>
+    </select>
+  </div>
+</div>
+
+<div class="config-card">
+  <h2>Requisições recentes</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>Session</th>
+          <th>Prompt tokens</th>
+          <th>Completion tokens</th>
+          <th>
+            <span>Tempo</span>
+            <select id="unitTable" class="time-unit-select time-unit-select--table" title="Unidade de exibição">
+              <option value="ms">ms</option>
+              <option value="s">s</option>
+              <option value="min">min</option>
+              <option value="h">h</option>
+            </select>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="recentTable">
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let unitAvg = 's', unitTotal = 's', unitTable = 'ms';
+
+function formatTime(ms, unit) {
+  const val = ms ?? 0;
+  let n;
+  if (unit === 'ms') n = val.toFixed(1);
+  else if (unit === 's') n = (val / 1000).toFixed(2);
+  else if (unit === 'min') n = (val / 60000).toFixed(2);
+  else if (unit === 'h') n = (val / 3600000).toFixed(3);
+  else n = val;
+  const suffix = { ms: 'ms', s: 's', min: 'min', h: 'h' }[unit] || '';
+  return n + (suffix ? ' ' + suffix : '');
+}
+
+function formatDateBR(iso) {
+  if (!iso) return '-';
+  try {
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} - ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return iso; }
+}
+
+let cachedSessions = [];
+
+async function load() {
+  const r = await fetch('/api/dashboard');
+  const d = await r.json();
+  const s = d.summary || {};
+  cachedSessions = d.recent_sessions || [];
+
+  document.getElementById('totalTokens').textContent = (s.total_tokens ?? 0).toLocaleString();
+  document.getElementById('totalRequests').textContent = (s.total_requests ?? 0).toLocaleString();
+  document.getElementById('avgResponse').textContent = formatTime(s.avg_response_time_ms, unitAvg);
+  document.getElementById('totalTime').textContent = formatTime(s.total_response_time_ms, unitTotal);
+
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('recentTable');
+  const sessions = cachedSessions.slice(0, 30);
+  tbody.innerHTML = sessions.map(x => `
+    <tr>
+      <td>${formatDateBR(x.timestamp)}</td>
+      <td><code>${(x.session_id || '-').slice(0, 8)}</code></td>
+      <td>${x.prompt_tokens ?? '-'}</td>
+      <td>${x.completion_tokens ?? '-'}</td>
+      <td>${formatTime(x.response_time_ms, unitTable)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5">Nenhuma requisição registrada</td></tr>';
+}
+
+document.getElementById('unitAvg').onchange = () => { unitAvg = document.getElementById('unitAvg').value; load(); };
+document.getElementById('unitTotal').onchange = () => { unitTotal = document.getElementById('unitTotal').value; load(); };
+document.getElementById('unitTable').onchange = () => { unitTable = document.getElementById('unitTable').value; renderTable(); };
+
+load();
+setInterval(load, 5000);
+</script>
+{% endblock %}
