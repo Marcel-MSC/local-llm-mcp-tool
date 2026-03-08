@@ -46,6 +46,10 @@ mcp.json
 # Conversation history (session files)
 history/
 
+# Web chat data
+web_chat/data/
+web_chat/uploads/
+
 # OS
 .DS_Store
 Thumbs.db

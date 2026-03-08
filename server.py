@@ -62,18 +62,70 @@ BASE_DIR = Path(__file__).resolve().parent
 HISTORY_DIR = BASE_DIR / DEFAULT_SESSION_HISTORY_DIR
 SESSIONS_INDEX_PATH = HISTORY_DIR / "sessions_index.json"
 
-# Global model instance
+# Global model instance and current path
 llama_model: Optional[Llama] = None
+_current_model_path: Optional[str] = None
+
+MODELS_DIR = os.getenv("MODELS_DIR", "")
+if not MODELS_DIR:
+    MODELS_DIR = str(BASE_DIR / "models")
+
+
+def get_available_models() -> List[Dict[str, str]]:
+    """List available GGUF models in MODELS_DIR and MODEL_PATH."""
+    models = []
+    seen = set()
+
+    # Scan models directory
+    models_path = Path(MODELS_DIR)
+    if models_path.exists() and models_path.is_dir():
+        for p in models_path.glob("*.gguf"):
+            path_str = str(p.resolve())
+            if path_str not in seen:
+                seen.add(path_str)
+                models.append({"path": path_str, "name": p.name})
+
+    # Include DEFAULT_MODEL_PATH if set and not already listed
+    if DEFAULT_MODEL_PATH and os.path.exists(DEFAULT_MODEL_PATH):
+        path_str = str(Path(DEFAULT_MODEL_PATH).resolve())
+        if path_str not in seen:
+            seen.add(path_str)
+            models.append({"path": path_str, "name": Path(DEFAULT_MODEL_PATH).name})
+
+    return sorted(models, key=lambda x: x["name"].lower())
+
+
+def unload_model() -> None:
+    """Unload the current model to free memory."""
+    global llama_model, _current_model_path
+    if llama_model is not None:
+        try:
+            del llama_model
+        except Exception:
+            pass
+        llama_model = None
+        _current_model_path = None
+        import gc
+        gc.collect()
+        print("Model unloaded.", file=sys.stderr)
 
 
 def load_model(model_path: Optional[str] = None) -> Llama:
-    """Loads the Llama model"""
-    global llama_model
+    """Loads the Llama model. Pass model_path to switch to a different model."""
+    global llama_model, _current_model_path
+
+    path = model_path or DEFAULT_MODEL_PATH
+    if not path:
+        path = DEFAULT_MODEL_PATH
+
+    path_resolved = str(Path(path).resolve()) if path else ""
+
+    # If requesting a different model, unload first
+    if llama_model is not None and _current_model_path != path_resolved:
+        unload_model()
 
     if llama_model is not None:
         return llama_model
-
-    path = model_path or DEFAULT_MODEL_PATH
 
     if not path or not os.path.exists(path):
         error_msg = (
@@ -93,11 +145,17 @@ def load_model(model_path: Optional[str] = None) -> Llama:
             n_gpu_layers=DEFAULT_N_GPU_LAYERS,
             verbose=False,
         )
+        _current_model_path = path_resolved
         print("Model loaded successfully!", file=sys.stderr)
         return llama_model
     except Exception as e:
         print(f"Error loading model: {e}", file=sys.stderr)
         raise
+
+
+def get_current_model_path() -> Optional[str]:
+    """Return the path of the currently loaded model."""
+    return _current_model_path
 
 
 # === Streaming generation helpers =============================================
@@ -135,7 +193,6 @@ def generate_with_streaming(
         if "choices" in chunk and len(chunk["choices"]) > 0:
             delta_text = chunk["choices"][0].get("text", "")
             if delta_text:
-                accumulated_text += delta_text
                 current_chunk += delta_text
                 
                 # Emit chunk when it reaches the target size

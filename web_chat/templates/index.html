@@ -1,0 +1,427 @@
+{% extends "base.html" %}
+{% block title %}Chat - Local LLM{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+{% endblock %}
+{% block main_class %}main--full{% endblock %}
+{% block content %}
+<div class="chat-layout">
+  <aside class="sidebar">
+    <button type="button" class="btn btn-primary btn-new-chat" id="btnNewChat">+ Nova conversa</button>
+    <div class="sidebar-title">Histórico</div>
+    <ul class="session-list" id="sessionList"></ul>
+  </aside>
+  <div class="chat-container">
+  <div class="chat-header">
+    <div class="model-selector">
+      <label for="modelSelect" class="model-selector-label">Modelo:</label>
+      <select id="modelSelect" class="model-select" title="Selecione o modelo. A troca pode demorar 1–2 minutos.">
+        <option value="">Carregando...</option>
+      </select>
+    </div>
+    <label class="history-toggle" title="Guardar histórico da conversa no servidor (pasta history/)">
+      <input type="checkbox" id="saveHistory" checked>
+      <span>Guardar histórico no servidor</span>
+    </label>
+  </div>
+
+  <div class="chat-main" id="chatMain">
+  <div class="messages" id="messages"></div>
+
+  <div class="input-area">
+    <div style="display: flex; flex-direction: column; flex: 1; gap: 0.5rem;">
+      <textarea id="userInput" placeholder="Digite sua mensagem..." rows="2"></textarea>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <button class="btn btn-primary" id="btnSend">Enviar</button>
+        <button class="btn btn-secondary" id="btnAnalyze" disabled title="Anexe um arquivo primeiro">Analisar arquivo</button>
+        <label class="btn btn-secondary btn-attach" id="btnAttach" style="cursor: pointer; margin: 0;">
+          <input type="file" id="fileInput" accept=".txt,.md,.py,.js,.json,.html,.css,.yaml,.yml,.toml" style="display: none">
+          <span class="btn-attach-text">Anexar arquivo</span>
+        </label>
+        <span id="fileInfo" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+      </div>
+    </div>
+  </div>
+  </div>
+  <div class="model-loading-overlay" id="modelLoadingOverlay" style="display: none;">
+    <div class="model-loading-content">
+      <div class="spinner model-loading-spinner"></div>
+      <p class="model-loading-title">Carregando modelo...</p>
+      <p class="model-loading-hint">A troca de modelo pode demorar 1–2 minutos. Aguarde.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const messagesEl = document.getElementById('messages');
+const userInput = document.getElementById('userInput');
+const btnSend = document.getElementById('btnSend');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const modelSelect = document.getElementById('modelSelect');
+const btnAnalyze = document.getElementById('btnAnalyze');
+const btnAttach = document.getElementById('btnAttach');
+const saveHistoryCheck = document.getElementById('saveHistory');
+const sessionListEl = document.getElementById('sessionList');
+const btnNewChat = document.getElementById('btnNewChat');
+
+let attachedFile = null;
+let sessionId = null;
+let conversationHistory = [];
+let selectedModelPath = null;
+let loadedModelPath = null;
+
+function setChatBlocked(blocked) {
+  const overlay = document.getElementById('modelLoadingOverlay');
+  const main = document.getElementById('chatMain');
+  overlay.style.display = blocked ? 'flex' : 'none';
+  main.style.pointerEvents = blocked ? 'none' : '';
+  main.style.opacity = blocked ? '0.6' : '1';
+  modelSelect.disabled = blocked;
+  userInput.disabled = blocked;
+  btnSend.disabled = blocked;
+  btnAnalyze.disabled = blocked;
+  btnAttach.style.pointerEvents = blocked ? 'none' : '';
+}
+
+async function switchModel(path) {
+  if (!path || path === loadedModelPath) return;
+  setChatBlocked(true);
+  try {
+    const r = await fetch('/api/model/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model_path: path }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Erro');
+    loadedModelPath = path;
+    selectedModelPath = path;
+  } catch (e) {
+    addMsg('assistant', `Erro ao trocar modelo: ${e.message}`, null);
+  } finally {
+    setChatBlocked(false);
+  }
+}
+
+async function loadModels() {
+  try {
+    const [modelR, modelsR] = await Promise.all([fetch('/api/model'), fetch('/api/models')]);
+    const modelData = await modelR.json();
+    const { models } = await modelsR.json();
+    loadedModelPath = modelData.model_path || null;
+    if (models.length && !selectedModelPath) selectedModelPath = loadedModelPath || models[0]?.path || null;
+    const currentPath = selectedModelPath || loadedModelPath || '';
+    modelSelect.innerHTML = models.length
+      ? models.map(m => `<option value="${(m.path || '').replace(/"/g, '&quot;')}" ${m.path === currentPath ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')
+      : '<option value="">Nenhum modelo encontrado</option>';
+    modelSelect.onchange = () => {
+      const path = modelSelect.value || null;
+      selectedModelPath = path;
+      if (path && path !== loadedModelPath) switchModel(path);
+    };
+  } catch (e) {
+    modelSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+}
+
+function addMsg(role, content, metrics = null, skipHistory = false) {
+  const div = document.createElement('div');
+  div.className = `msg msg-${role}`;
+  const formatted = role === 'assistant' ? formatMessage(content) : escapeHtml(content).replace(/\n/g, '<br>');
+  div.innerHTML = `
+    <div class="msg-role">${role === 'user' ? 'Você' : 'Assistente'}</div>
+    <div class="msg-content">${formatted}</div>
+    ${metrics ? `<div class="metrics-mini">${metrics.completion_tokens} tokens · ${metrics.response_time_ms}ms</div>` : ''}
+  `;
+  messagesEl.appendChild(div);
+  if (!skipHistory) {
+    if (role === 'user') conversationHistory.push({ role: 'user', content });
+    else if (role === 'assistant') conversationHistory.push({ role: 'assistant', content });
+  }
+  div.querySelectorAll('.btn-copy').forEach(btn => {
+    btn.onclick = () => copyCode(btn);
+  });
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function formatMessage(content) {
+  if (typeof marked !== 'undefined') {
+    marked.setOptions({ breaks: true });
+  }
+  const parts = [];
+  const regex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let m;
+  while ((m = regex.exec(content)) !== null) {
+    if (m.index > lastIndex) {
+      const text = content.slice(lastIndex, m.index);
+      parts.push({ type: 'text', content: text });
+    }
+    parts.push({ type: 'code', lang: m[1] || '', code: m[2].replace(/\n$/, '') });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < content.length) {
+    parts.push({ type: 'text', content: content.slice(lastIndex) });
+  }
+  if (parts.length === 0) {
+    return typeof marked !== 'undefined'
+      ? marked.parse(content.trim() || '')
+      : escapeHtml(content).replace(/\n/g, '<br>');
+  }
+  return parts.map(p => {
+    if (p.type === 'text') {
+      const t = p.content.trim();
+      return typeof marked !== 'undefined' && t
+        ? marked.parse(t)
+        : escapeHtml(p.content).replace(/\n/g, '<br>');
+    }
+    const id = 'code-' + Math.random().toString(36).slice(2);
+    return `
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-lang">${escapeHtml(p.lang) || 'code'}</span>
+          <button type="button" class="btn-copy" data-id="${id}" title="Copiar">Copiar</button>
+        </div>
+        <pre><code id="${id}">${escapeHtml(p.code)}</code></pre>
+      </div>
+    `;
+  }).join('');
+}
+
+function copyCode(btn) {
+  const id = btn.dataset.id;
+  const codeEl = document.getElementById(id);
+  if (!codeEl) return;
+  navigator.clipboard.writeText(codeEl.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copiado!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function sendMessage() {
+  const text = userInput.value.trim();
+  if (!text && !attachedFile) return;
+
+  if (attachedFile) {
+    addMsg('user', text ? `Analisar "${attachedFile.filename}": ${text}` : `Analisar arquivo: ${attachedFile.filename}`);
+  } else {
+    addMsg('user', text);
+  }
+
+  userInput.value = '';
+  const file = attachedFile;
+  fileInfo.textContent = '';
+  attachedFile = null;
+  btnAnalyze.disabled = true;
+  btnSend.disabled = true;
+  btnSend.innerHTML = '<span class="spinner"></span>';
+  setAttachLoading(true);
+
+  const waitingEl = document.createElement('div');
+  waitingEl.className = 'msg msg-assistant';
+  waitingEl.id = 'waiting-msg';
+  waitingEl.innerHTML = '<div class="msg-role">Assistente</div><div class="msg-content" style="color: var(--text-muted);">Aguarde, gerando resposta... (a primeira vez pode demorar 1–2 min enquanto o modelo carrega)</div>';
+  messagesEl.appendChild(waitingEl);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  if (file) {
+    const form = new FormData();
+    form.append('path', file.path);
+    form.append('instruction', text || '');
+    form.append('max_tokens', '512');
+    form.append('temperature', '0.3');
+    if (selectedModelPath) form.append('model_path', selectedModelPath);
+    try {
+      const r = await fetch('/api/analyze', { method: 'POST', body: form });
+      const d = r.headers.get('content-type')?.includes('json') ? await r.json() : { detail: await r.text() };
+      if (!r.ok) throw new Error(d.detail || 'Erro');
+      waitingEl.remove();
+      addMsg('assistant', d.analysis, d.metrics);
+    } catch (e) {
+      waitingEl.remove();
+      addMsg('assistant', `Erro: ${e.message}`, null);
+      console.error('Analyze error:', e);
+    }
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const saveHistory = saveHistoryCheck.checked;
+    if (!saveHistory) sessionId = null;
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+        messages: saveHistory ? [{ role: 'user', content: text }] : conversationHistory,
+        max_tokens: 512,
+        temperature: 0.7,
+        top_p: 0.9,
+        save_history: saveHistory,
+        session_id: sessionId || null,
+        model_path: selectedModelPath || null,
+      }),
+    });
+    const data = r.headers.get('content-type')?.includes('json') ? await r.json() : { detail: await r.text() };
+    if (!r.ok) throw new Error(data.detail || 'Erro');
+
+    waitingEl.remove();
+    if (saveHistory && data.session_id) {
+      sessionId = data.session_id;
+      loadSessions();
+    }
+    addMsg('assistant', data.response, data.metrics);
+  } catch (e) {
+    waitingEl.remove();
+    addMsg('assistant', `Erro: ${e.message}`, null);
+    console.error('Chat error:', e);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setAttachLoading(loading) {
+  const text = btnAttach.querySelector('.btn-attach-text');
+  if (loading) {
+    btnAttach.classList.add('loading');
+    btnAttach.style.pointerEvents = 'none';
+    if (text) {
+      text.dataset.orig = text.textContent;
+      text.innerHTML = '<span class="spinner spinner-sm"></span>';
+    }
+  } else {
+    btnAttach.classList.remove('loading');
+    btnAttach.style.pointerEvents = '';
+    if (text && text.dataset.orig) {
+      text.textContent = text.dataset.orig;
+      delete text.dataset.orig;
+    }
+  }
+}
+
+function setLoading(loading) {
+  btnSend.disabled = !loading ? false : true;
+  btnSend.innerHTML = loading ? '<span class="spinner"></span>' : 'Enviar';
+  setAttachLoading(loading);
+}
+
+fileInput.onchange = (e) => {
+  const f = e.target.files?.[0];
+  if (f) {
+    setAttachLoading(true);
+    const form = new FormData();
+    form.append('file', f);
+    fetch('/api/upload', { method: 'POST', body: form })
+      .then(r => r.json())
+      .then(d => {
+        attachedFile = { path: d.path, filename: d.filename };
+        fileInfo.textContent = `📄 ${d.filename}`;
+        btnAnalyze.disabled = false;
+      })
+      .catch(() => { fileInfo.textContent = 'Erro no upload'; btnAnalyze.disabled = true; })
+      .finally(() => setAttachLoading(false));
+  } else {
+    attachedFile = null;
+    fileInfo.textContent = '';
+    btnAnalyze.disabled = true;
+  }
+};
+
+async function analyzeFile() {
+  if (!attachedFile) return;
+  const { path: filePath, filename } = attachedFile;
+  btnAnalyze.disabled = true;
+  btnAnalyze.innerHTML = '<span class="spinner"></span>';
+
+  const form = new FormData();
+  form.append('path', filePath);
+  form.append('instruction', userInput.value.trim() || '');
+  form.append('max_tokens', '512');
+  form.append('temperature', '0.3');
+  if (selectedModelPath) form.append('model_path', selectedModelPath);
+
+  try {
+    const r = await fetch('/api/analyze', { method: 'POST', body: form });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || 'Erro');
+
+    addMsg('assistant', `Análise de "${filename}":\n\n${d.analysis}`, d.metrics);
+  } catch (e) {
+    addMsg('assistant', `Erro: ${e.message}`, null);
+  } finally {
+    btnAnalyze.disabled = false;
+    btnAnalyze.textContent = 'Analisar arquivo';
+  }
+}
+
+btnAnalyze.onclick = analyzeFile;
+
+btnSend.onclick = sendMessage;
+userInput.onkeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+};
+
+async function loadSessions() {
+  try {
+    const r = await fetch('/api/sessions');
+    const d = await r.json();
+    sessionListEl.innerHTML = d.sessions.length === 0
+      ? '<li class="session-empty">Nenhuma conversa salva</li>'
+      : d.sessions.map(s => {
+          const date = s.last_used_at ? new Date(s.last_used_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : '';
+          const title = `Conversa ${s.id.slice(0, 8)}`;
+          const active = sessionId === s.id ? ' active' : '';
+          return `<li class="session-item${active}" data-id="${s.id}">
+            <div class="session-item-title">${escapeHtml(title)}</div>
+            <div class="session-item-meta">${s.message_count} msgs · ${date}</div>
+          </li>`;
+        }).join('');
+    sessionListEl.querySelectorAll('.session-item').forEach(el => {
+      el.onclick = () => loadSession(el.dataset.id);
+    });
+  } catch (e) {
+    sessionListEl.innerHTML = '<li class="session-empty">Erro ao carregar</li>';
+  }
+}
+
+function loadSession(id) {
+  if (sessionId === id) return;
+  fetch(`/api/sessions/${id}/messages`)
+    .then(r => r.json())
+    .then(d => {
+      messagesEl.innerHTML = '';
+      conversationHistory = [];
+      d.messages.forEach(m => addMsg(m.role, m.content, null, true));
+      conversationHistory = [...d.messages];
+      sessionId = id;
+      loadSessions();
+    })
+    .catch(() => {});
+}
+
+function newChat() {
+  messagesEl.innerHTML = '';
+  conversationHistory = [];
+  sessionId = null;
+  loadSessions();
+}
+
+btnNewChat.onclick = newChat;
+
+loadModels();
+loadSessions();
+</script>
+{% endblock %}

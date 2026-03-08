@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Configuração - Local LLM{% endblock %}
+{% block content %}
+<div class="config-card">
+  <h2>Modelo em uso</h2>
+  <div class="config-row">
+    <label>Modelo</label>
+    <code>{{ model_info.model_name | default('N/A') }}</code>
+  </div>
+  <div class="config-row">
+    <label>Contexto</label>
+    <code>{{ model_info.context_size | default(2048) }} tokens</code>
+  </div>
+  <div class="config-row">
+    <label>Threads</label>
+    <code>{{ model_info.n_threads | default(4) }}</code>
+  </div>
+  <div class="config-row">
+    <label>GPU Layers</label>
+    <code>{{ model_info.n_gpu_layers | default(0) }}</code>
+  </div>
+</div>
+
+<div class="config-card">
+  <h2>Como configurar</h2>
+  <p style="color: var(--text-muted); margin-bottom: 0.75rem;">
+    As configurações são lidas do arquivo <code>.env</code> na raiz do projeto.
+  </p>
+  <table>
+    <tr>
+      <td><code>MODEL_PATH</code></td>
+      <td>Caminho para o arquivo GGUF do modelo</td>
+    </tr>
+    <tr>
+      <td><code>CONTEXT_SIZE</code></td>
+      <td>Tamanho máximo do contexto (padrão: 2048)</td>
+    </tr>
+    <tr>
+      <td><code>N_THREADS</code></td>
+      <td>Número de threads CPU (padrão: 4)</td>
+    </tr>
+    <tr>
+      <td><code>N_GPU_LAYERS</code></td>
+      <td>Camadas GPU (0=CPU, -1=todas)</td>
+    </tr>
+  </table>
+</div>
+{% endblock %}
